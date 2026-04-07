@@ -1,6 +1,6 @@
 /*
   ESP32-C3 Super Mini + TB6612FNG
-  BLE robot control with startup movement test
+  BLE robot control with startup movement test + dead-man timeout
 
   Commands:
     F = Forward
@@ -8,6 +8,14 @@
     L = Turn Left
     R = Turn Right
     S = Stop
+    V<number> = Set persistent speed (0..255), e.g. V120
+
+  Behavior:
+    - F/B/L/R start motion using the currently saved speed
+    - Robot auto-stops if no fresh motion command is received
+      within COMMAND_TIMEOUT_MS
+    - Best used with a controller that keeps sending commands
+      while the button is held
 */
 
 #include <Arduino.h>
@@ -32,12 +40,24 @@ static const int DEFAULT_SPEED = 180;
 static const bool LEFT_MOTOR_INVERT  = true;
 static const bool RIGHT_MOTOR_INVERT = true;
 
+// ---------------- SAFETY TIMEOUT ----------------
+// Robot will stop if no fresh motion command is received
+// within this time window.
+static const unsigned long COMMAND_TIMEOUT_MS = 250;
+
 // ---------------- BLE UUIDS ----------------
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
 BLECharacteristic *pCharacteristic;
 bool deviceConnected = false;
+
+// ---------------- MOTION WATCHDOG ----------------
+unsigned long lastMotionCommandTime = 0;
+bool motorsAreRunning = false;
+
+// ---------------- PERSISTENT SPEED ----------------
+int currentSpeed = DEFAULT_SPEED;
 
 // ------------------------------------------------
 // MOTOR CONTROL ABSTRACTION
@@ -93,6 +113,8 @@ void drive(int leftSpeed, int rightSpeed) {
   setLeftMotor(leftSpeed);
   setRightMotor(rightSpeed);
 
+  motorsAreRunning = !((leftSpeed == 0) && (rightSpeed == 0));
+
   Serial.print("Drive L=");
   Serial.print(leftSpeed);
   Serial.print(" R=");
@@ -115,17 +137,25 @@ void moveBackward(int speedValue = DEFAULT_SPEED) {
 }
 
 void moveLeft(int speedValue = DEFAULT_SPEED) {
-  // gentle left pivot:
   // left wheel backward, right wheel forward
   drive(-speedValue, speedValue);
   Serial.println("LEFT");
 }
 
 void moveRight(int speedValue = DEFAULT_SPEED) {
-  // gentle right pivot:
   // left wheel forward, right wheel backward
   drive(speedValue, -speedValue);
   Serial.println("RIGHT");
+}
+
+void refreshMotionWatchdog() {
+  lastMotionCommandTime = millis();
+}
+
+void setPersistentSpeed(int speedValue) {
+  currentSpeed = constrain(speedValue, 0, 255);
+  Serial.print("Speed set to: ");
+  Serial.println(currentSpeed);
 }
 
 // ---------------- BLE CALLBACKS ----------------
@@ -150,17 +180,49 @@ class MyCallbacks : public BLECharacteristicCallbacks {
     if (cmd.length() == 0) return;
 
     cmd.trim();
-    char c = toupper(cmd[0]);
+    cmd.toUpperCase();
 
     Serial.print("RX: ");
     Serial.println(cmd);
 
+    if (cmd.startsWith("V")) {
+      String speedText = cmd.substring(1);
+      int speedValue = speedText.toInt();
+      setPersistentSpeed(speedValue);
+
+      String ack = "ACK:V" + String(currentSpeed);
+      characteristic->setValue(ack.c_str());
+      characteristic->notify();
+      return;
+    }
+
+    char c = cmd[0];
+
     switch (c) {
-      case 'F': moveForward();  break;
-      case 'B': moveBackward(); break;
-      case 'L': moveLeft();     break;
-      case 'R': moveRight();    break;
-      case 'S': stopMotors();   break;
+      case 'F':
+        moveForward(currentSpeed);
+        refreshMotionWatchdog();
+        break;
+
+      case 'B':
+        moveBackward(currentSpeed);
+        refreshMotionWatchdog();
+        break;
+
+      case 'L':
+        moveLeft(currentSpeed);
+        refreshMotionWatchdog();
+        break;
+
+      case 'R':
+        moveRight(currentSpeed);
+        refreshMotionWatchdog();
+        break;
+
+      case 'S':
+        stopMotors();
+        break;
+
       default:
         Serial.println("Unknown command");
         return;
@@ -176,24 +238,24 @@ void startupTest() {
   Serial.println("Starting motor test...");
 
   moveForward(170);
-  delay(800);
+  delay(500);
   stopMotors();
-  delay(400);
+  delay(250);
 
   moveBackward(170);
-  delay(800);
+  delay(500);
   stopMotors();
-  delay(400);
+  delay(250);
 
   moveLeft(170);
-  delay(700);
-  stopMotors();
   delay(400);
+  stopMotors();
+  delay(250);
 
   moveRight(170);
-  delay(700);
-  stopMotors();
   delay(400);
+  stopMotors();
+  delay(250);
 
   stopMotors();
   Serial.println("Motor test complete.");
@@ -244,10 +306,23 @@ void setup() {
 
   Serial.println("BLE Ready...");
   Serial.println("Device name: ESP32C3_Robot");
-  Serial.println("Commands: F B L R S");
+  Serial.println("Commands: F B L R S V<number>");
+  Serial.print("Default speed: ");
+  Serial.println(currentSpeed);
+  Serial.print("Command timeout (ms): ");
+  Serial.println(COMMAND_TIMEOUT_MS);
+
+  lastMotionCommandTime = millis();
 }
 
 // ---------------- LOOP ----------------
 void loop() {
-  delay(20);
+  unsigned long now = millis();
+
+  if (motorsAreRunning && (now - lastMotionCommandTime > COMMAND_TIMEOUT_MS)) {
+    Serial.println("Command timeout reached, stopping motors");
+    stopMotors();
+  }
+
+  delay(10);
 }

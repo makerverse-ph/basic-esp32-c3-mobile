@@ -9,13 +9,6 @@
     R = Turn Right
     S = Stop
     V<number> = Set persistent speed (0..255), e.g. V120
-
-  Behavior:
-    - F/B/L/R start motion using the currently saved speed
-    - Robot auto-stops if no fresh motion command is received
-      within COMMAND_TIMEOUT_MS
-    - Best used with a controller that keeps sending commands
-      while the button is held
 */
 
 #include <Arduino.h>
@@ -36,13 +29,10 @@ static const int PWMB_PIN = 7;
 static const int DEFAULT_SPEED = 180;
 
 // ---------------- MOTOR INVERSION ----------------
-// Change these if motion is opposite of expected.
 static const bool LEFT_MOTOR_INVERT  = true;
 static const bool RIGHT_MOTOR_INVERT = true;
 
 // ---------------- SAFETY TIMEOUT ----------------
-// Robot will stop if no fresh motion command is received
-// within this time window.
 static const unsigned long COMMAND_TIMEOUT_MS = 250;
 
 // ---------------- BLE UUIDS ----------------
@@ -137,13 +127,11 @@ void moveBackward(int speedValue = DEFAULT_SPEED) {
 }
 
 void moveLeft(int speedValue = DEFAULT_SPEED) {
-  // left wheel backward, right wheel forward
   drive(-speedValue, speedValue);
   Serial.println("LEFT");
 }
 
 void moveRight(int speedValue = DEFAULT_SPEED) {
-  // left wheel forward, right wheel backward
   drive(speedValue, -speedValue);
   Serial.println("RIGHT");
 }

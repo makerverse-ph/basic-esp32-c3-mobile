@@ -24,8 +24,8 @@
 #include <BLEServer.h>
 
 // ---------------- PIN DEFINITIONS ----------------
-static const int AIN1_PIN = 1;
-static const int AIN2_PIN = 3;
+static const int AIN1_PIN = 3;
+static const int AIN2_PIN = 1;
 static const int PWMA_PIN = 0;
 
 static const int BIN1_PIN = 5;

@@ -24,13 +24,13 @@
 #include <BLEServer.h>
 
 // ---------------- PIN DEFINITIONS ----------------
-static const int AIN1_PIN = 1;
-static const int AIN2_PIN = 3;
+static const int AIN1_PIN = 3;
+static const int AIN2_PIN = 1;
 static const int PWMA_PIN = 0;
 
-static const int BIN1_PIN = 5;
+static const int BIN1_PIN = 7;
 static const int BIN2_PIN = 6;
-static const int PWMB_PIN = 7;
+static const int PWMB_PIN = 5;
 
 // ---------------- SPEED SETTINGS ----------------
 static const int DEFAULT_SPEED = 180;
